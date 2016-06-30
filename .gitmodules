@@ -1,0 +1,9 @@
+[submodule "etl"]
+	path = etl
+	url = https://github.com/wichtounet/etl.git
+[submodule "cpm"]
+	path = cpm
+	url = https://github.com/wichtounet/cpm.git
+[submodule "make-utils"]
+	path = make-utils
+	url = https://github.com/wichtounet/make-utils.git
