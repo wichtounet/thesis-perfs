@@ -43,10 +43,11 @@ namespace standard = etl::impl::standard;
 namespace sse = etl::impl::sse;
 namespace avx = etl::impl::avx;
 namespace blas = etl::impl::blas;
+namespace reduc = etl::impl::reduc;
 
 CPM_DIRECT_SECTION_TWO_PASS_NS_PF("sconv2_valid", conv2_valid_policy,
     FLOPS([](std::size_t d1, std::size_t d2){ return 2 * d1 * d1 * d2 * d2; }),
-    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(smat(d1,d1), smat(d2,d2), smat(d1 + d2 - 1, d1 + d2 - 1)); }),
+    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(smat(d1,d1), smat(d2,d2), smat(d1 - d2 + 1, d1 - d2 + 1)); }),
     CPM_SECTION_FUNCTOR("std", [](smat& a, smat& b, smat& r){ standard::conv2_valid(a, b, r); }),
     CPM_SECTION_FUNCTOR("sse", [](smat& a, smat& b, smat& r){ sse::conv2_valid(a.direct(), b.direct(), r.direct()); }),
     CPM_SECTION_FUNCTOR("avx", [](smat& a, smat& b, smat& r){ avx::conv2_valid(a.direct(), b.direct(), r.direct()); }),
@@ -55,7 +56,7 @@ CPM_DIRECT_SECTION_TWO_PASS_NS_PF("sconv2_valid", conv2_valid_policy,
 
 CPM_DIRECT_SECTION_TWO_PASS_NS_PF("dconv2_valid", conv2_valid_policy,
     FLOPS([](std::size_t d1, std::size_t d2){ return 2 * d1 * d1 * d2 * d2; }),
-    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(dmat(d1,d1), dmat(d2,d2), dmat(d1 + d2 - 1, d1 + d2 - 1)); }),
+    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(dmat(d1,d1), dmat(d2,d2), dmat(d1 - d2 + 1, d1 - d2 + 1)); }),
     CPM_SECTION_FUNCTOR("std", [](dmat& a, dmat& b, dmat& r){ standard::conv2_valid(a, b, r); }),
     CPM_SECTION_FUNCTOR("sse", [](dmat& a, dmat& b, dmat& r){ sse::conv2_valid(a.direct(), b.direct(), r.direct()); }),
     CPM_SECTION_FUNCTOR("avx", [](dmat& a, dmat& b, dmat& r){ avx::conv2_valid(a.direct(), b.direct(), r.direct()); }),
@@ -78,4 +79,27 @@ CPM_DIRECT_SECTION_TWO_PASS_NS_PF("dconv2_full", conv2_full_policy,
     CPM_SECTION_FUNCTOR("sse", [](dmat& a, dmat& b, dmat& r){ sse::conv2_full(a.direct(), b.direct(), r.direct()); }),
     CPM_SECTION_FUNCTOR("avx", [](dmat& a, dmat& b, dmat& r){ avx::conv2_full(a.direct(), b.direct(), r.direct()); }),
     CPM_SECTION_FUNCTOR("fft_mkl", [](dmat& a, dmat& b, dmat& r){ blas::conv2_full(a.direct(), b.direct(), r.direct()); })
+)
+
+constexpr const std::size_t K = 100;
+#define I_TO_K for(std::size_t i = 0; i < K; ++i)
+
+CPM_DIRECT_SECTION_TWO_PASS_NS_PF("sconv2_valid_multi", conv2_valid_policy,
+    FLOPS([](std::size_t d1, std::size_t d2){ return K * 2 * d1 * d1 * d2 * d2; }),
+    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(smat(d1,d1), smat3(K, d2,d2), smat3(K, d1 - d2 + 1, d1 - d2 + 1)); }),
+    CPM_SECTION_FUNCTOR("std", [](smat& a, smat3& b, smat3& r){ I_TO_K standard::conv2_valid(a, b(i), r(i)); }),
+    CPM_SECTION_FUNCTOR("sse", [](smat& a, smat3& b, smat3& r){ I_TO_K sse::conv2_valid(a.direct(), b(i).direct(), r(i).direct()); }),
+    CPM_SECTION_FUNCTOR("avx", [](smat& a, smat3& b, smat3& r){ I_TO_K avx::conv2_valid(a.direct(), b(i).direct(), r(i).direct()); }),
+    CPM_SECTION_FUNCTOR("mmul", [](smat& a, smat3& b, smat3& r){ reduc::blas_conv2_valid_multi(a, b, r); }),
+    CPM_SECTION_FUNCTOR("fft", [](smat& a, smat3& b, smat3& r){ reduc::fft_conv2_valid_multi(a, b, r); })
+)
+
+CPM_DIRECT_SECTION_TWO_PASS_NS_PF("dconv2_valid_multi", conv2_valid_policy,
+    FLOPS([](std::size_t d1, std::size_t d2){ return K * 2 * d1 * d1 * d2 * d2; }),
+    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(dmat(d1,d1), dmat3(K, d2,d2), dmat3(K, d1 - d2 + 1, d1 - d2 + 1)); }),
+    CPM_SECTION_FUNCTOR("std", [](dmat& a, dmat3& b, dmat3& r){ I_TO_K standard::conv2_valid(a, b(i), r(i)); }),
+    CPM_SECTION_FUNCTOR("sse", [](dmat& a, dmat3& b, dmat3& r){ I_TO_K sse::conv2_valid(a.direct(), b(i).direct(), r(i).direct()); }),
+    CPM_SECTION_FUNCTOR("avx", [](dmat& a, dmat3& b, dmat3& r){ I_TO_K avx::conv2_valid(a.direct(), b(i).direct(), r(i).direct()); }),
+    CPM_SECTION_FUNCTOR("mmul", [](dmat& a, dmat3& b, dmat3& r){ reduc::blas_conv2_valid_multi(a, b, r); }),
+    CPM_SECTION_FUNCTOR("fft", [](dmat& a, dmat3& b, dmat3& r){ reduc::fft_conv2_valid_multi(a, b, r); })
 )
