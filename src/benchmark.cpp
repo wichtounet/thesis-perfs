@@ -37,6 +37,40 @@ void blas_conv2_valid(const I& input, const K_T& kernel, C&& conv) {
     etl::reshape(conv, f1 * f2) = mul(etl::reshape(prepared_k, k1 * k2), input_col);
 }
 
+template <typename I, typename K_T, typename C>
+void blas_conv2_full_multi(const I& input, const K_T& kernel, C&& conv) {
+    const std::size_t K = etl::dim<0>(kernel);
+    const std::size_t v1 = etl::dim<0>(input);
+    const std::size_t v2 = etl::dim<1>(input);
+    const std::size_t k1 = etl::dim<1>(kernel);
+    const std::size_t k2 = etl::dim<2>(kernel);
+    const std::size_t f1 = etl::dim<1>(conv);
+    const std::size_t f2 = etl::dim<2>(conv);
+
+    etl::dyn_matrix<etl::complex<etl::value_t<I>>, 2> i_padded(f1, f2);
+    etl::dyn_matrix<etl::complex<etl::value_t<I>>, 3> k_padded(K, f1, f2);
+    etl::dyn_matrix<etl::complex<etl::value_t<I>>, 2> tmp(f1, f2);
+
+    for (std::size_t i = 0; i < v1; ++i) {
+        etl::direct_copy_n(input.memory_start() + i * v2, i_padded.memory_start() + i * f2, v2);
+    }
+
+    for (std::size_t k = 0; k < K; ++k) {
+        for (std::size_t i = 0; i < k1; ++i) {
+            etl::direct_copy_n(kernel.memory_start() + k * k1 * k2 + i * k2, k_padded.memory_start() + k * f1 * f2 + i * f2, k2);
+        }
+    }
+
+    i_padded.fft2_inplace();
+    k_padded.fft2_many_inplace();
+
+    for (std::size_t k = 0; k < K; ++k) {
+        tmp = i_padded >> k_padded(k);
+        tmp.fft2_inplace();
+        conv(k) = etl::real(tmp);
+    }
+}
+
 } //end of anonymous namespace
 
 namespace standard = etl::impl::standard;
@@ -102,4 +136,22 @@ CPM_DIRECT_SECTION_TWO_PASS_NS_PF("dconv2_valid_multi", conv2_valid_policy,
     CPM_SECTION_FUNCTOR("avx", [](dmat& a, dmat3& b, dmat3& r){ I_TO_K avx::conv2_valid(a.direct(), b(i).direct(), r(i).direct()); }),
     CPM_SECTION_FUNCTOR("mmul", [](dmat& a, dmat3& b, dmat3& r){ reduc::blas_conv2_valid_multi(a, b, r); }),
     CPM_SECTION_FUNCTOR("fft", [](dmat& a, dmat3& b, dmat3& r){ reduc::fft_conv2_valid_multi(a, b, r); })
+)
+
+CPM_DIRECT_SECTION_TWO_PASS_NS_PF("sconv2_full_multi", conv2_full_policy,
+    FLOPS([](std::size_t d1, std::size_t d2){ return K * 2 * d1 * d1 * d2 * d2; }),
+    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(smat(d1,d1), smat3(K, d2,d2), smat3(K, d1 + d2 - 1, d1 + d2 - 1)); }),
+    CPM_SECTION_FUNCTOR("std", [](smat& a, smat3& b, smat3& r){ I_TO_K standard::conv2_full(a, b(i), r(i)); }),
+    CPM_SECTION_FUNCTOR("sse", [](smat& a, smat3& b, smat3& r){ I_TO_K sse::conv2_full(a.direct(), b(i).direct(), r(i).direct()); }),
+    CPM_SECTION_FUNCTOR("avx", [](smat& a, smat3& b, smat3& r){ I_TO_K avx::conv2_full(a.direct(), b(i).direct(), r(i).direct()); }),
+    CPM_SECTION_FUNCTOR("fft_mkl", [](smat& a, smat3& b, smat3& r){ blas_conv2_full_multi(a, b, r); })
+)
+
+CPM_DIRECT_SECTION_TWO_PASS_NS_PF("dconv2_full_multi", conv2_full_policy,
+    FLOPS([](std::size_t d1, std::size_t d2){ return K * 2 * d1 * d1 * d2 * d2; }),
+    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(dmat(d1,d1), dmat3(K, d2,d2), dmat3(K, d1 + d2 - 1, d1 + d2 - 1)); }),
+    CPM_SECTION_FUNCTOR("std", [](dmat& a, dmat3& b, dmat3& r){ I_TO_K standard::conv2_full(a, b(i), r(i)); }),
+    CPM_SECTION_FUNCTOR("sse", [](dmat& a, dmat3& b, dmat3& r){ I_TO_K sse::conv2_full(a.direct(), b(i).direct(), r(i).direct()); }),
+    CPM_SECTION_FUNCTOR("avx", [](dmat& a, dmat3& b, dmat3& r){ I_TO_K avx::conv2_full(a.direct(), b(i).direct(), r(i).direct()); }),
+    CPM_SECTION_FUNCTOR("fft_mkl", [](dmat& a, dmat3& b, dmat3& r){ blas_conv2_full_multi(a, b, r); })
 )
