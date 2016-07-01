@@ -16,7 +16,28 @@ using conv2_full_policy = NARY_POLICY(
     VALUES_POLICY(12, 16, 16, 28, 50, 128, 128, 256),
     VALUES_POLICY(5, 5, 9, 9, 17, 17, 31, 31));
 
-// TODO Integrate mmul reduction
+namespace {
+
+template <typename I, typename K_T, typename C>
+void blas_conv2_valid(const I& input, const K_T& kernel, C&& conv) {
+    const std::size_t v1 = etl::dim<0>(input);
+    const std::size_t v2 = etl::dim<1>(input);
+    const std::size_t k1 = etl::dim<0>(kernel);
+    const std::size_t k2 = etl::dim<1>(kernel);
+    const std::size_t f1 = etl::dim<1>(conv);
+    const std::size_t f2 = etl::dim<2>(conv);
+
+    auto prepared_k = force_temporary(kernel);
+
+    prepared_k.fflip_inplace();
+
+    etl::dyn_matrix<etl::value_t<I>, 2> input_col(k1 * k2, (v1 - k1 + 1) * (v2 - k2 + 1));
+    im2col_direct_tr(input_col, input, k1, k2);
+
+    etl::reshape(conv, f1 * f2) = mul(etl::reshape(prepared_k, k1 * k2), input_col);
+}
+
+} //end of anonymous namespace
 
 CPM_DIRECT_SECTION_TWO_PASS_NS_PF("sconv2_valid", conv2_valid_policy,
     FLOPS([](std::size_t d1, std::size_t d2){ return 2 * d1 * d1 * d2 * d2; }),
@@ -24,6 +45,16 @@ CPM_DIRECT_SECTION_TWO_PASS_NS_PF("sconv2_valid", conv2_valid_policy,
     CPM_SECTION_FUNCTOR("std", [](smat& a, smat& b, smat& r){ r = selected_helper(etl::conv_impl::STD, etl::conv_2d_valid(a, b)); }),
     CPM_SECTION_FUNCTOR("sse", [](smat& a, smat& b, smat& r){ r = selected_helper(etl::conv_impl::SSE, etl::conv_2d_valid(a, b)); }),
     CPM_SECTION_FUNCTOR("avx", [](smat& a, smat& b, smat& r){ r = selected_helper(etl::conv_impl::AVX, etl::conv_2d_valid(a, b)); }),
+    CPM_SECTION_FUNCTOR("mmul", [](smat& a, smat& b, smat& r){ blas_conv2_valid(a, b, r); })
+)
+
+CPM_DIRECT_SECTION_TWO_PASS_NS_PF("dconv2_valid", conv2_valid_policy,
+    FLOPS([](std::size_t d1, std::size_t d2){ return 2 * d1 * d1 * d2 * d2; }),
+    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(dmat(d1,d1), dmat(d2,d2), dmat(d1 + d2 - 1, d1 + d2 - 1)); }),
+    CPM_SECTION_FUNCTOR("std", [](dmat& a, dmat& b, dmat& r){ r = selected_helper(etl::conv_impl::STD, etl::conv_2d_valid(a, b)); }),
+    CPM_SECTION_FUNCTOR("sse", [](dmat& a, dmat& b, dmat& r){ r = selected_helper(etl::conv_impl::SSE, etl::conv_2d_valid(a, b)); }),
+    CPM_SECTION_FUNCTOR("avx", [](dmat& a, dmat& b, dmat& r){ r = selected_helper(etl::conv_impl::AVX, etl::conv_2d_valid(a, b)); }),
+    CPM_SECTION_FUNCTOR("mmul", [](dmat& a, dmat& b, dmat& r){ blas_conv2_valid(a, b, r); })
 )
 
 CPM_DIRECT_SECTION_TWO_PASS_NS_PF("sconv2_full", conv2_full_policy,
@@ -33,4 +64,13 @@ CPM_DIRECT_SECTION_TWO_PASS_NS_PF("sconv2_full", conv2_full_policy,
     CPM_SECTION_FUNCTOR("sse", [](smat& a, smat& b, smat& r){ r = selected_helper(etl::conv_impl::SSE, etl::conv_2d_full(a, b)); }),
     CPM_SECTION_FUNCTOR("avx", [](smat& a, smat& b, smat& r){ r = selected_helper(etl::conv_impl::AVX, etl::conv_2d_full(a, b)); }),
     CPM_SECTION_FUNCTOR("fft_mkl", [](smat& a, smat& b, smat& r){ r = selected_helper(etl::conv_impl::FFT_MKL, etl::conv_2d_full(a, b)); })
+)
+
+CPM_DIRECT_SECTION_TWO_PASS_NS_PF("dconv2_full", conv2_full_policy,
+    FLOPS([](std::size_t d1, std::size_t d2){ return 2 * d1 * d1 * d2 * d2; }),
+    CPM_SECTION_INIT([](std::size_t d1, std::size_t d2){ return std::make_tuple(dmat(d1,d1), dmat(d2,d2), dmat(d1 + d2 - 1, d1 + d2 - 1)); }),
+    CPM_SECTION_FUNCTOR("std", [](dmat& a, dmat& b, dmat& r){ r = selected_helper(etl::conv_impl::STD, etl::conv_2d_full(a, b)); }),
+    CPM_SECTION_FUNCTOR("sse", [](dmat& a, dmat& b, dmat& r){ r = selected_helper(etl::conv_impl::SSE, etl::conv_2d_full(a, b)); }),
+    CPM_SECTION_FUNCTOR("avx", [](dmat& a, dmat& b, dmat& r){ r = selected_helper(etl::conv_impl::AVX, etl::conv_2d_full(a, b)); }),
+    CPM_SECTION_FUNCTOR("fft_mkl", [](dmat& a, dmat& b, dmat& r){ r = selected_helper(etl::conv_impl::FFT_MKL, etl::conv_2d_full(a, b)); })
 )
