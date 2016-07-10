@@ -19,20 +19,26 @@ CXX_FLAGS += -DETL_PARALLEL
 endif
 
 # Compile source files
-$(eval $(call auto_folder_compile,src))
+$(eval $(call folder_compile,src))
 
 # Create executables
-$(eval $(call auto_add_executable,bench))
-$(eval $(call add_executable_set,bench,bench))
+$(eval $(call add_executable,bench,src/benchmark.cpp))
+$(eval $(call add_executable,precision,src/benchmark_precision.cpp))
 
-release: release_bench
-release_debug: release_debug_bench
-debug: debug_bench
+$(eval $(call add_executable_set,bench,bench))
+$(eval $(call add_executable_set,precision,precision))
+
+release: release_bench release_precision
+release_debug: release_debug_bench release_debug_precision
+debug: debug_bench debug_precision
 
 all: release release_debug debug
 
 run: release
 	./release/bin/bench
+
+run_pre: release
+	./release/bin/precision
 
 cppcheck:
 	cppcheck -I include/ --platform=unix64 --suppress=missingIncludeSystem --enable=all --std=c++11 benchmark/*.cpp workbench/*.cpp include/etl/*.hpp
