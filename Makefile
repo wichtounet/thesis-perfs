@@ -11,8 +11,8 @@ CXX_FLAGS += -pedantic -Werror -Winvalid-pch -Wno-uninitialized
 # Add includes
 CXX_FLAGS += -Ietl/lib/include -Ietl/include/ -Icpm/include
 
-CXX_FLAGS +=-DETL_VECTORIZE_FULL -DETL_MKL_MODE $(shell pkg-config --cflags mkl)
-LD_FLAGS += -pthread $(shell pkg-config --libs mkl)
+CXX_FLAGS +=-DETL_VECTORIZE_FULL -DETL_MKL_MODE $(shell pkg-config --cflags mkl-threads) -DETL_CUDNN_MODE $(shell pkg-config --cflags cudnn)
+LD_FLAGS += -pthread $(shell pkg-config --libs mkl-threads) $(shell pkg-config --libs cudnn)
 
 ifneq (,$(ETL_PARALLEL))
 CXX_FLAGS += -DETL_PARALLEL
